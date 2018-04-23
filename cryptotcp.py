@@ -477,6 +477,15 @@ class CryptoTCP(CryptoEngine):
         nfo("Socket closed.")
 
     def process_data(self, process_func, block=False, close_after=False):
+        """Starts a new thread to handle incoming data.
+
+        Args:
+            process_func (function): Function to call when data is available.
+            block (bool): Wether the current func return immediately or wait
+                for the thread to close.
+            close_after (bool): Wether the socket should be closed when the
+                thread finishes.
+        """
         self._continue_thread = True
         newThread = Thread(target=self.data_reader, args=(process_func,))
         nfo("Starting communication handler on {}".format(newThread.name))
