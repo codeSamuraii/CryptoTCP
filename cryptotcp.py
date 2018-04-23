@@ -313,6 +313,7 @@ class CryptoTCP(CryptoEngine):
         return True
 
     def _exchange_keys_client(self):
+        # TODO: Exception handling, return value
         clientRsa = self._rsa_keychain['ssh']
         sessionKey = self.set_session_aes()
         current_sock = self._current_sock
@@ -325,6 +326,7 @@ class CryptoTCP(CryptoEngine):
         current_sock.sendall(ciphKey)
 
     def _exchange_keys_server(self):
+        # TODO: Exception handling, return value
         serverRsa = self._rsa_keychain['ssh']
         current_sock = self._current_sock
 
@@ -336,6 +338,12 @@ class CryptoTCP(CryptoEngine):
         self.set_session_aes(sessionKey)
 
     def exchange_keys(self):
+        """Exchange RSA and AES keys.
+
+        First each party's public key is transmitted to the other. Then, using
+        that key, the client generates and encrypts the AES session key before
+        sending it to the server.
+        """
         dbg("Exchanging keys... ")
         if self._mode == self.MODE_CLIENT:
             self._exchange_keys_client()
@@ -344,6 +352,16 @@ class CryptoTCP(CryptoEngine):
         nfo("Secure connection established.")
 
     def send_secure(self, data):
+        """Send encrypted data to peer.
+
+        Args:
+            data (bytes): Data to send.
+
+        Returns:
+            bool: True if data is successfully sent and confirmed by peer,
+                False if peer fails validation or if a problem occurs.
+
+        """
         current_sock = self._current_sock
 
         packet = self.aes_encrypt(data)
@@ -362,23 +380,29 @@ class CryptoTCP(CryptoEngine):
         confirmation = current_sock.recv(4).decode('utf-8')
         if confirmation == "/OK/":
             dbg("Peer confirmation received.")
+            return True
         else:
             err("Peer encountered an error.")
+            return False
 
     def _sig_error(self):
+        """Notify peer that there was an issue while handling received data."""
         self._current_sock.sendall("/KO/".encode('utf-8'))
         dbg("Error notification sent.")
 
     def _sig_confirm(self):
+        """Notify peer that data was received and decrypted."""
         self._current_sock.sendall("/OK/".encode('utf-8'))
         dbg("Confirmation sent.")
 
     def _sig_stop(self):
+        """Notify peer to stop his communication handler."""
         current_sock = self._current_sock
         header = self.aes_encrypt("INCOMING:STOP-")
         current_sock.sendall(header)
 
     def _sig_post(self):
+        """Ask peer to send back a STOP signal to close local handler."""
         current_sock = self._current_sock
         header = self.aes_encrypt("INCOMING:POST-")
         current_sock.sendall(header)
