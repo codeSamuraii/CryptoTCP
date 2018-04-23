@@ -411,6 +411,7 @@ class CryptoTCP(CryptoEngine):
         self._continue_thread = False
 
     def _comm_handler(self):
+        """Method that waits for data and decrypts it."""
         current_sock = self._current_sock
         id = "T" + threading.current_thread().name[-1] + ": "
 
@@ -463,6 +464,7 @@ class CryptoTCP(CryptoEngine):
             process_func(data)
 
     def disconnect(self):
+        """Disconnect and close connection."""
         if self._continue_thread:
             err("Handler is still running.")
             return
@@ -500,6 +502,7 @@ class CryptoTCP(CryptoEngine):
             self.disconnect()
 
     def listen_auto(self, port, process_func=None, **process_args):
+        """Listen for incoming connections and automatically exchange keys."""
         self.listen(port)
         self._exchange_keys_server()
         if process_func:
@@ -510,6 +513,7 @@ class CryptoTCP(CryptoEngine):
             time.sleep(3)  # Wait for distant handler to start
 
     def connect_auto(self, ip, port, process_func=None, **process_args):
+        """Same as above."""
         self.connect(ip, port)
         self._exchange_keys_client()
         if process_func:
@@ -520,12 +524,15 @@ class CryptoTCP(CryptoEngine):
             time.sleep(3)
 
     def stop_handlers(self):
+        """Stop local and remote handlers."""
         self._sig_post()
         self._sig_stop()
         time.sleep(2)
 
     def stop_local_handler(self):
+        """Stop local handler."""
         self._sig_post()
 
     def stop_remote_handler(self):
+        """Stop remote handler."""
         self._sig_stop()
