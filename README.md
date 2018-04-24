@@ -1,27 +1,25 @@
 # CryptoTCP
-This class was created to easily implement a secure communication tunnel in Python 3.
+This module was created to easily implement a secure communication tunnel using Python 3.
 
-The CryptoTCP class provides a simple way to set-up a TCP server and client with hybrid (RSA + AES) encryption, handling both cryptographic and network operations such as socket listening and connection, key generation, data encryption and decryption etc.
+## Introduction
+The CryptoTCP class provides a simple way to set-up a TCP server/client with hybrid encryption, handling cryptographic and network operations such as: socket management, data transmission, key generation, encryption/decryption, encapsulation etc.
 
-Simple server example:
+#### Examples
+
+##### Server
 ```python
-from cryptotcp import CryptoTCP
-
-
-# This function is called each time new data is received
-def my_processing_func(data):
+# This function is called each time nw data is received
+def my_process_func(data):
     print("\n* * * * CALLING FUNC * * * *")
-    print(str(data) + "\n")
-
+    print(str(data), "\n")
 
 my_tcp_server = CryptoTCP()
-my_tcp_server.listen_auto(8978, my_processing_func, block=True, close_after=True)
+my_tcp_server.listen_auto(8978, my_process_func, block=True)
 ```
+The server will listen on port 8978 and automatically set-up a secure communication with the client. Every incoming message is then deciphered and passed to our processing function. The last instruction will block until handler is closed.
 
-Corresponding client:
+##### Client
 ```python
-from cryptotcp import CryptoTCP
-
 my_tcp_client = CryptoTCP()
 my_tcp_client.connect_auto("127.0.0.1", 8978)
 
@@ -29,24 +27,5 @@ my_tcp_client.send_secure("(1) Hello, world!")
 my_tcp_client.send_secure("(2) This exchange is secure.")
 
 my_tcp_client.stop_remote_handler()
-my_tcp_client.disconnect()
 ```
-
-Will produce the following output server-side:
-```
-INFO   RSA 2048 bits - AES 16 bytes
-INFO   Listening on 8978...
-INFO   Inbound connection from 127.0.0.1
-INFO   Starting communication handler on Thread-1
-INFO   T1: 102 bytes received. Final size: 17 bytes
-
-* * * * CALLING FUNC * * * *
-b'(1) Hello, world!'
-
-INFO   T1: 113 bytes received. Final size: 28 bytes
-
-* * * * CALLING FUNC * * * *
-b'(2) This exchange is secure.'
-
-INFO   T1: Closing handler.
-```
+The client will connect to the server, set-up encryption and send two encrypted messages. After that, it will notify the server to stop waiting for data.

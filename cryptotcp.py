@@ -459,9 +459,9 @@ class CryptoTCP(CryptoEngine):
 
         nfo(id + "Closing handler.")
 
-    def data_reader(self, process_func):
+    def data_reader(self, process_fnc):
         for data in self._comm_handler():
-            process_func(data)
+            process_fnc(data)
 
     def disconnect(self):
         """Disconnect and close connection."""
@@ -478,18 +478,18 @@ class CryptoTCP(CryptoEngine):
         self._current_sock = None
         nfo("Socket closed.")
 
-    def process_data(self, process_func, block=False, close_after=False):
+    def process_data(self, process_fnc, block=True, close_after=True):
         """Starts a new thread to handle incoming data.
 
         Args:
-            process_func (function): Function to call when data is available.
+            process_fnc (function): Function to call when data is available.
             block (bool): Wether the current func return immediately or wait
                 for the thread to close.
             close_after (bool): Wether the socket should be closed when the
                 thread finishes.
         """
         self._continue_thread = True
-        newThread = Thread(target=self.data_reader, args=(process_func,))
+        newThread = Thread(target=self.data_reader, args=(process_fnc,))
         nfo("Starting communication handler on {}".format(newThread.name))
         newThread.setDaemon(True)
         newThread.start()
@@ -501,23 +501,24 @@ class CryptoTCP(CryptoEngine):
         if block and close_after:
             self.disconnect()
 
-    def listen_auto(self, port, process_func=None, **process_args):
+    # TODO: Tidy up args
+    def listen_auto(self, port, process_fnc=None, **process_args):
         """Listen for incoming connections and automatically exchange keys."""
         self.listen(port)
         self._exchange_keys_server()
-        if process_func:
-            self.process_data(process_func, **process_args)
+        if process_fnc:
+            self.process_data(process_fnc, **process_args)
             time.sleep(1)
         else:
             nfo("Waiting for client to be ready...")
             time.sleep(3)  # Wait for distant handler to start
 
-    def connect_auto(self, ip, port, process_func=None, **process_args):
+    def connect_auto(self, ip, port, process_fnc=None, **process_args):
         """Same as above."""
         self.connect(ip, port)
         self._exchange_keys_client()
-        if process_func:
-            self.process_data(process_func, **process_args)
+        if process_fnc:
+            self.process_data(process_fnc, **process_args)
             time.sleep(1)
         else:
             nfo("Waiting for server to be ready...")
