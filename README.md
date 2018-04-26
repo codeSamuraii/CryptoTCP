@@ -29,3 +29,19 @@ my_tcp_client.send_secure("(2) This exchange is secure.")
 my_tcp_client.stop_remote_handler()
 ```
 The client will connect to the server, set-up encryption and send two encrypted messages. After that, it will notify the server to stop waiting for data.
+
+## API documentation
+#### Introduction
+All *private* methods and attributes - those which start with a single underscore, e.g. ```_sig_post()``` - are generally not supposed to be called, they are meant for internal use only.
+
+#### CryptoEngine
+All cryptographic operations are handled by the *CryptoEngine* class, from which CryptoTCP inherits.
+
+CryptoEngine can be used on it's own but does not provide generic encryption methods, it was designed to be used in conjonction with CryptoTCP.
+
+###### Initialization
+Arguments (all optional):
+* ```aes_byte_strenght``` (defaults to 16) : size in byte of the AES session key.
+* ```rsa_bit_strenght``` (default to 2048) : size in bits of the RSA keychain.
+
+_**To be continued...**_
