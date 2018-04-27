@@ -19,9 +19,12 @@ from Crypto.Cipher import PKCS1_OAEP as RsaCipher
 
 
 class InvalidParameterError(ValueError, TypeError):
-    def __init__(self, message):
-        super().__init__("unexpected exception.\n" + message +
-                         "\nUse provided methods to avoid data inconsistency.")
+    def __init__(self, method, cause=None):
+        display = "\nUnexpected error in " + method
+        display += "\nLikely cause: {}".format(cause) if cause else ""
+        display += "\nUse provided methods to avoid data inconsistency."
+        super().__init__(display)
+
 
 class CryptoEngine(object):
     """Class that handles cryptographic operations.
@@ -106,7 +109,7 @@ class CryptoEngine(object):
         except ValueError:
             raise ValueError("Incorrect data length.") from None
         except Exception as unknown_e:
-            raise InvalidParameterError("Encryption error. Peer key must be invalid.") \
+            raise InvalidParameterError("rsa_encrypt()", "invalid peer key.") \
                 from unknown_e
 
         return ciphered_data
@@ -128,7 +131,8 @@ class CryptoEngine(object):
         except ValueError:
             raise ValueError("Incorrect length or failed integrity check.")
         except Exception as unknown_e:
-            raise InvalidParameterError("Decryption error.") from unknown_e
+            raise InvalidParameterError("rsa_decrypt()", "corrupted keychain.") \
+                from unknown_e
 
         return deciphered_data
 
@@ -177,9 +181,10 @@ class CryptoEngine(object):
         try:
             comm_cipher = AesCipher.new(self._session_key, AesCipher.MODE_EAX)
         except Exception as unknown_e:
-            raise InvalidParameterError("Error while creating cipher.") \
+            raise InvalidParameterError("aes_encrypt()", "bad session key.") \
                 from unknown_e
-# FIXME: HERE
+
+# COMBAK: here
         try:
             ciphered_data, tag = comm_cipher.encrypt_and_digest(data)
         except Exception:
