@@ -1,26 +1,27 @@
 # -*- coding: utf-8 -*-
 
 """
-CryptoTCP v0.1
-© Rémi Héneault 2018
+CryptoTCP v0.2
+© Rémi Héneault (@codeSamuraii)
+https://github.com/codeSamuraii
 """
-import time
-import socket
-import pickle
 import logging
+import pickle
+import socket
+import sys
 import threading
-from sys import getsizeof
-from threading import Thread
+import time
 
 from Crypto import Random
-from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES as AesCipher
 from Crypto.Cipher import PKCS1_OAEP as RsaCipher
+from Crypto.PublicKey import RSA
 
-# Logging and verbose-printing functions
-log = logging.getLogger()
-logging.basicConfig(format="%(levelname)-6s %(message)s")
-dbg, nfo, wrn, err = log.debug, log.info, log.warning, log.error
+
+class UnexpectedError(ValueError, TypeError):
+    def __init__(self, cause):
+        display = "\nUnexpected error. {}".format(cause)
+        super().__init__(display)
 
 
 class CryptoEngine(object):
@@ -35,8 +36,6 @@ class CryptoEngine(object):
             bytes, defaults to 16.
         rsa_bit_strenght (int, optional): Size of the RSA private key in bits,
             defaults to 2048.
-        logging_level (int, optional): Logging level, can be set either using
-            'logging' module presets or corresponding integer.
 
     Methods:
         import_peer_rsa: import the other party's public key.
@@ -44,29 +43,29 @@ class CryptoEngine(object):
         rsa_encrypt - rsa_decrypt - aes_encrypt - aes_decrypt: self-explanatory.
     """
 
-    def __init__(self, aes_byte_strenght=16, rsa_bit_strenght=2048,
-                 logging_level=logging.INFO):
-        log.setLevel(logging_level)
-        dbg("Debugging active.")
+    def __init__(self, aes_byte_strenght=16, rsa_bit_strenght=2048):
+        # Arguments verification
+        if aes_byte_strenght not in {16, 24, 32}:
+            raise ValueError("AES strenght must be of [16, 24, 32]")
+        if rsa_bit_strenght not in {1024, 2048, 3072}:
+            raise ValueError("RSA strenght must be of [1024, 2048, 3072]")
 
         self._aes_size = aes_byte_strenght
         self._rsa_size = rsa_bit_strenght
         self._rsa_byte_size = int(rsa_bit_strenght / 8)
-        nfo("RSA {} bits - AES {} bytes".format(
-            rsa_bit_strenght,
-            aes_byte_strenght))
 
-        dbg("Generating RSA keys...")
+        # Generate RSA keychain
         rsa_private = RSA.generate(rsa_bit_strenght)
         rsa_public = rsa_private.publickey()
         rsa_public_ssh = rsa_public.exportKey('OpenSSH')
-        dbg("Generating complete.")
 
         self._rsa_keychain = {
             "private": rsa_private,
             "public": rsa_public,
             "ssh": rsa_public_ssh,
             "peer": None}
+
+        self._session_key = None
 
     def import_peer_rsa(self, key):
         """Imports the other party's RSA public key.
@@ -76,21 +75,14 @@ class CryptoEngine(object):
 
         Args:
             key (bytes): The public key to use for encryption.
-
-        Returns:
-            bool: True in case of success, False otherwise.
-
         """
-        dbg("Importing peer key...")
         try:
-            peerKey = RSA.importKey(key)
-        except Exception:
-            err("Error while importing peer key!")
-            return False
-
-        self._rsa_keychain["peer"] = peerKey
-        dbg("Peer key imported.")
-        return True
+            peer_key = RSA.importKey(key)
+        except (ValueError, IndexError, TypeError) as original_ex:
+            raise ValueError("Error during import. Key must be invalid.") \
+                from original_ex
+        else:
+            self._rsa_keychain["peer"] = peer_key
 
     def rsa_encrypt(self, data):
         """Encrypts data using other party's public key.
@@ -99,25 +91,27 @@ class CryptoEngine(object):
             data (bytes or str): Data to encrypt.
 
         Returns:
-            bytes: Ciphered data in case of success, empty byte otherwise.
-
+            bytes: Ciphered data.
         """
-        try:
-            peerKey = self._rsa_keychain["peer"]
-        except KeyError:
-            err("No peer key to encrypt with.")
-            return bytes(False)
+        peer_key = self._rsa_keychain["peer"]
+        if peer_key is None:
+            raise KeyError("Peer key not found. Have you imported it ?")
 
-        if isinstance(data, str):
-            data = data.encode('utf-8')
-
-        sendCipher = RsaCipher.new(peerKey)
         try:
-            ciphered_data = sendCipher.encrypt(data)
-            return ciphered_data
+            send_rsa_cipher = RsaCipher.new(peer_key)
+        except Exception as unknown_e:
+            raise UnexpectedError("Can't initialize RSA cipher.") \
+                from unknown_e
+
+        try:
+            ciphered_data = send_rsa_cipher.encrypt(data)
         except ValueError:
-            err("Message is too long.")
-            return bytes(False)
+            raise ValueError("Incorrect data length.") from None
+        except Exception as unknown_e:
+            raise UnexpectedError("Exception during RSA encrption.") \
+                from unknown_e
+
+        return ciphered_data
 
     def rsa_decrypt(self, data):
         """Decrypt data using own RSA private key.
@@ -126,20 +120,23 @@ class CryptoEngine(object):
             data (bytes): Ciphered data.
 
         Returns:
-            bytes: Deciphered data in case of success, empty byte otherwise.
-
+            bytes: Deciphered data.
         """
-        persKey = self._rsa_keychain["private"]
-        recvCipher = RsaCipher.new(persKey)
+        personnal_rsa_key = self._rsa_keychain["private"]
+        recv_rsa_cipher = RsaCipher.new(personnal_rsa_key)
 
         try:
-            deciphered_data = recvCipher.decrypt(data)
-            return deciphered_data
+            deciphered_data = recv_rsa_cipher.decrypt(data)
         except ValueError:
-            err("Wrong length or failed integrity check.")
-            return bytes(False)
+            raise ValueError("Incorrect length or failed integrity check.") \
+                from None
+        except Exception as unknown_e:
+            raise UnexpectedError("Exception during RSA decryption.") \
+                from unknown_e
 
-    def set_session_aes(self, key=None):
+        return deciphered_data
+
+    def set_session_aes(self, custom_key=None):
         """Imports specified AES key or generates one.
 
         Args:
@@ -149,14 +146,20 @@ class CryptoEngine(object):
             bytes: AES session key to be used for communication.
 
         """
-        if key is None:
-            dbg("Generating session key... ")
-            sessionKey = Random.get_random_bytes(self._aes_size)
+        if custom_key is None:
+            aes_session_key = Random.get_random_bytes(self._aes_size)
         else:
-            sessionKey = key
+            if not isinstance(custom_key, bytes):
+                raise TypeError(
+                    "Session custom_key must be a byte string or array.")
+            elif len(custom_key) not in {16, 24, 32}:
+                raise ValueError(
+                    "Session custom_key length must be of [16, 24, 32].")
+            else:
+                aes_session_key = custom_key
 
-        self._session_key = sessionKey
-        return sessionKey
+        self._session_key = aes_session_key
+        return aes_session_key
 
     def aes_encrypt(self, data):
         """Encrypt data with AES.
@@ -166,69 +169,71 @@ class CryptoEngine(object):
 
         Returns:
             bytes: a pickle bytes buffer containing the encrypted data, the
-                nonce and the tag in case of success, an empty byte otherwise.
+                nonce and the tag.
 
         """
+        if not isinstance(data, (str, bytes)):
+            raise TypeError("Input data type must be string or bytes.")
+        if self._session_key is None:
+            raise KeyError("No session key found. Import or generate one.")
+
         if isinstance(data, str):
             data = data.encode('utf-8')
 
         try:
             comm_cipher = AesCipher.new(self._session_key, AesCipher.MODE_EAX)
-        except Exception:
-            err("Error while creating the cipher, key must be incorrect.")
-            return bytes(False)
+        except Exception as unknown_e:
+            raise UnexpectedError("Can't initialize cipher. Session key "
+                                  "must be invalid.") from unknown_e
 
         try:
             ciphered_data, tag = comm_cipher.encrypt_and_digest(data)
-        except Exception:
-            err("Error while decrypting, data must be inconsistent or key is "
-                "wrong.")
-            return bytes(False)
+        except Exception as unknown_e:
+            raise UnexpectedError("Failed AES encryption.") from unknown_e
+        else:
+            nonce = comm_cipher.nonce
+            packet = pickle.dumps([nonce, tag, ciphered_data])
 
-        nonce = comm_cipher.nonce
-        packet = pickle.dumps([nonce, tag, ciphered_data])
         return packet
 
     def aes_decrypt(self, data):
         """Decrypts AES-encrypted data.
 
         This is not a generic decryption function, data input must be a byte
-        buffer made by previous method.
+        pickle buffer made by previous method.
 
         Args:
             data (bytes): Byte buffer containing the necessary for decryption.
 
         Returns:
-            bytes: Bytes representation of decrypted data in case of success,
-                empty byte otherwise.
+            bytes: Bytes representation of decrypted data.
 
         """
         try:
             data = pickle.loads(data)
             nonce, tag, ciphered = data[0], data[1], data[2]
-        except pickle.UnpicklingError:
-            err("Error while unpacking data.")
-            return bytes(False)
-        except Exception:
-            err("Packed data doesn't match necessary pattern.")
-            return bytes(False)
+        except Exception as unknown_e:
+            raise UnexpectedError("Corrupted data packet.") from unknown_e
 
         try:
             comm_cipher = AesCipher.new(self._session_key,
                                         AesCipher.MODE_EAX,
                                         nonce)
-        except Exception:
-            err("Error while creating the cipher, key must be incorrect.")
-            return bytes(False)
+        except Exception as unknown_e:
+            raise UnexpectedError("Can't initialize AES cipher. "
+                                  "Session key must be invalid.") \
+                from unknown_e
 
         try:
             deciphered_data = comm_cipher.decrypt_and_verify(ciphered, tag)
-            return deciphered_data
-        except Exception:
-            err("Error during decryption. Nonce or tag may be inconsistent.")
-            return bytes(False)
+        except Exception as unknown_e:
+            raise UnexpectedError(
+                "Error during AES decryption.") from unknown_e
+
+        return deciphered_data
 
 
+# TODO: Upgrade next class
 class CryptoTCP(CryptoEngine):
     """Class that provides a simple encrypted TCP client or server.
 
