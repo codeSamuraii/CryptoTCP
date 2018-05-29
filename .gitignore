@@ -1,5 +1,6 @@
 # New version - not ready yet
 cryptotcp_module.py
+*.old
 
 ############ AUTOMATIC ###########
 .DS_Store
