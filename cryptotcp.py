@@ -11,6 +11,7 @@ import socket
 import sys
 import threading
 import time
+from warnings import warn
 
 from Crypto import Random
 from Crypto.Cipher import AES as AesCipher
@@ -19,8 +20,15 @@ from Crypto.PublicKey import RSA
 
 
 class UnexpectedError(ValueError, TypeError):
+    """Class for unexpected exceptions.
+
+    They are raised when PyCrypto reports an error, most likely due to an incorrect
+    use of the module or manual modification of CryptoTCP propreties. They shouldn't
+    happen if provided methods are used.
+    """
+
     def __init__(self, cause):
-        display = "\nUnexpected error. {}".format(cause)
+        display = f"\n{cause}\nUse provided methods to avoid data inconsistency."
         super().__init__(display)
 
 
@@ -29,21 +37,30 @@ class CryptoEngine(object):
 
     Contains methods to encrypt and decrypt using AES and RSA.
     Before using such methods, you need to import the other's party RSA
-    public key and the AES session key using corresponding functions.
+    public key or the AES session key using corresponding functions.
 
-    Args:
-        aes_byte_strenght (int, optional): Size of the AES session key in
-            bytes, defaults to 16.
-        rsa_bit_strenght (int, optional): Size of the RSA private key in bits,
-            defaults to 2048.
-
-    Methods:
-        import_peer_rsa: import the other party's public key.
-        set_session_aes: generate or import the AES session key.
-        rsa_encrypt - rsa_decrypt - aes_encrypt - aes_decrypt: self-explanatory.
+    Please note that encryption methods are not generic and return values can
+    only be processed with another CryptoEngine/CryptoTCP instance.
     """
 
     def __init__(self, aes_byte_strenght=16, rsa_bit_strenght=2048):
+        """Class constructor.
+
+        Args:
+            aes_byte_strenght (int, optional): Size of the AES session key in
+                bytes, defaults to 16.
+            rsa_bit_strenght (int, optional): Size of the RSA private key in bits,
+                defaults to 2048.
+
+        Methods:
+            import_peer_rsa: import the other party's public key.
+            set_session_aes: generate or import the AES session key.
+            rsa_encrypt - rsa_decrypt - aes_encrypt - aes_decrypt: self-explanatory.
+
+        Raises:
+            ValueError: invalid AES or RSA key size.
+        """
+
         # Arguments verification
         if aes_byte_strenght not in {16, 24, 32}:
             raise ValueError("AES strenght must be of [16, 24, 32]")
@@ -75,6 +92,9 @@ class CryptoEngine(object):
 
         Args:
             key (bytes): The public key to use for encryption.
+
+        Raises:
+            ValueError: invalid peer key.
         """
         try:
             peer_key = RSA.importKey(key)
@@ -92,6 +112,10 @@ class CryptoEngine(object):
 
         Returns:
             bytes: Ciphered data.
+
+        Raises:
+            KeyError: peer key not imported yet.
+            ValueError: incorrect data length for input data.
         """
         peer_key = self._rsa_keychain["peer"]
         if peer_key is None:
@@ -121,6 +145,9 @@ class CryptoEngine(object):
 
         Returns:
             bytes: Deciphered data.
+
+        Raises:
+            ValueError: data must be corrupted.
         """
         personnal_rsa_key = self._rsa_keychain["private"]
         recv_rsa_cipher = RsaCipher.new(personnal_rsa_key)
@@ -145,6 +172,9 @@ class CryptoEngine(object):
         Returns:
             bytes: AES session key to be used for communication.
 
+        Raises:
+            TypeError: wrong input type.
+            ValueError: wrong key length.
         """
         if custom_key is None:
             aes_session_key = Random.get_random_bytes(self._aes_size)
@@ -171,6 +201,9 @@ class CryptoEngine(object):
             bytes: a pickle bytes buffer containing the encrypted data, the
                 nonce and the tag.
 
+        Raises:
+            TypeError: wrong input type.
+            KeyError: no session key to use for encryption.
         """
         if not isinstance(data, (str, bytes)):
             raise TypeError("Input data type must be string or bytes.")
@@ -207,7 +240,6 @@ class CryptoEngine(object):
 
         Returns:
             bytes: Bytes representation of decrypted data.
-
         """
         try:
             data = pickle.loads(data)
@@ -233,7 +265,6 @@ class CryptoEngine(object):
         return deciphered_data
 
 
-# TODO: Upgrade next class
 class CryptoTCP(CryptoEngine):
     """Class that provides a simple encrypted TCP client or server.
 
@@ -256,35 +287,32 @@ class CryptoTCP(CryptoEngine):
 
         CryptoEngine.__init__(self, **engine_params)
 
+    # TODO: Multiple connections, socket array
     def connect(self, ip, port):
-        """Connect to distant server.
+        """Connect (socket only) to distant server.
 
         Args:
             ip (str): Distant IP.
             port (int): Distant port.
 
         Returns:
-            bool: True in case of success, False otherwise.
-
+            socket.socket: newly established connection.
         """
         if self._current_sock:
-            err("Already connected.")
-            return False
+            warn("Socket already connected.")
+            return self._current_sock
 
         self._mode = self.MODE_CLIENT
-        nfo("Connecting to {}:{}... ".format(ip, port))
         new_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         new_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         try:
             new_sock.connect((ip, port))
         except socket.error as e:
-            err("Error #{}: {}".format(e.errno, e.strerror))
-            return False
+            raise ConnectionError("Connection error : {}".format(e.strerror))
 
         self._current_sock = new_sock
-        nfo("Connected. ")
-        return True
+        return new_sock
 
     def listen(self, port):
         """Listen for incoming connection.
