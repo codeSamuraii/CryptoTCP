@@ -1,6 +1,6 @@
 # CryptoTCP
 This module was created to easily implement a secure communication tunnel using Python 3.
-###### _Version 0.2 is coming soon with an optimized and more elegant design._
+###### This software was a personnal proof-of-concept and is not suitable for production use.
 
 ## Introduction
 The CryptoTCP class provides a simple way to set-up a TCP server/client with hybrid encryption, handling cryptographic and network operations such as: socket management, data transmission, key generation, encryption/decryption, encapsulation etc.
